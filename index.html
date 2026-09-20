@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô Phỏng Trường Vectơ Dòng Nước Xoáy</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        .control-panel {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+        }
+        .slider-label {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .status-text {
+            font-size: 14px;
+            color: #555;
+            margin-top: 5px;
+            font-weight: 500;
+        }
+        input[type=range] {
+            width: 100%;
+            margin: 10px 0;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="control-panel">
+        <div class="slider-label">Giá trị Rot (Curl): <span id="rot-value">0.0</span></div>
+        <input type="range" id="rot-slider" min="-10" max="10" step="0.5" value="0">
+        <div id="status" class="status-text">Không xoáy (Dòng chảy thẳng)</div>
+    </div>
+    <canvas id="simCanvas" width="450" height="450"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const slider = document.getElementById('rot-slider');
+    const rotValueDisplay = document.getElementById('rot-value');
+    const statusDisplay = document.getElementById('status');
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // Khởi tạo danh sách các hạt (particles) để hiển thị dòng chảy
+    const numParticles = 120;
+    const particles = [];
+    for (let i = 0; i < numParticles; i++) {
+        particles.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            life: Math.random() * 100
+        });
+    }
+
+    // Hàm xác định mức độ mạnh yếu dựa trên giá trị rot
+    function getStatusText(rot) {
+        if (rot === 0) return "Không xoáy (Dòng chảy thẳng)";
+        
+        let direction = rot < 0 ? "Thuận chiều kim đồng hồ" : "Ngược chiều kim đồng hồ";
+        let absRot = Math.abs(rot);
+        let strength = "";
+        
+        if (absRot <= 3) strength = "Yếu";
+        else if (absRot <= 7) strength = "Vừa";
+        else strength = "Mạnh";
+        
+        return `Xoáy ${direction} (Mức độ: ${strength})`;
+    }
+
+    // Hàm vẽ và cập nhật trạng thái mô phỏng
+    function draw() {
+        // Lấy giá trị rot từ thanh trượt
+        const rot = parseFloat(slider.value);
+        rotValueDisplay.innerText = rot.toFixed(1);
+        statusDisplay.innerText = getStatusText(rot);
+
+        // Xóa canvas cũ
+        ctx.clearRect(0, 0, width, height);
+
+        // 1. Vẽ các mũi tên Trường Vectơ (Grid ô lưới 20x20 pixel)
+        const spacing = 25;
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.3)';
+        ctx.lineWidth = 1.5;
+
+        for (let x = spacing / 2; x < width; x += spacing) {
+            for (let y = spacing / 2; y < height; y += spacing) {
+                // Tính khoảng cách từ điểm hiện tại tới tâm xoáy
+                const dx = x - centerX;
+                const dy = y - centerY;
+                const r = Math.sqrt(dx * dx + dy * dy);
+
+                if (r < 10) continue; // Bỏ qua điểm quá sát tâm để tránh lỗi toán học
+
+                // Thành phần vectơ xoáy (Vectơ vuông góc với bán kính)
+                // Nhân với tỷ lệ (r / 200) để càng ra xa xoáy càng rộng và rõ nét
+                let vx = -dy * (rot / 10) * (r / 150);
+                let vy = dx * (rot / 10) * (r / 150);
+
+                // Thêm một chút dòng chảy nền hướng lên trên để tạo độ động khi rot = 0
+                vy -= 0.5; 
+
+                // Tính độ dài mũi tên hiển thị
+                const len = Math.sqrt(vx * vx + vy * vy);
+                if (len === 0) continue;
+
+                // Chuẩn hóa và cố định độ dài mũi tên vẽ trên màn hình là 12px
+                const drawLen = 12;
+                const arrowX = (vx / len) * drawLen;
+                const arrowY = (vy / len) * drawLen;
+
+                // Tiến hành vẽ mũi tên
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + arrowX, y + arrowY);
+                ctx.stroke();
+
+                // Vẽ đầu nhọn của mũi tên
+                ctx.save();
+                ctx.translate(x + arrowX, y + arrowY);
+                ctx.rotate(Math.atan2(arrowY, arrowX));
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-4, -2);
+                ctx.lineTo(-4, 2);
+                ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // 2. Cập nhật vị trí và vẽ các Hạt Phần Tử (Hạt đen) trôi theo dòng
+        ctx.fillStyle = '#2c3e50';
+        for (let i = 0; i < particles.length; i++) {
+            let p = particles[i];
+            
+            const dx = p.x - centerX;
+            const dy = p.y - centerY;
+            const r = Math.sqrt(dx * dx + dy * dy);
+
+            // Tính vận tốc tác động lên hạt tại vị trí hiện tại
+            let vx = -dy * (rot / 15);
+            let vy = dx * (rot / 15);
+            
+            // Giới hạn tốc độ hạt khi ở quá xa để tránh bị văng khỏi màn hình quá nhanh
+            if (r > 10) {
+                vx = (vx / r) * Math.min(r * (Math.abs(rot)/10), 3);
+                vy = (vy / r) * Math.min(r * (Math.abs(rot)/10), 3);
+            }
+
+            // Dòng chảy nền hướng lên trên
+            vy -= 0.8;
+
+            // Di chuyển hạt
+            p.x += vx;
+            p.y += vy;
+            p.life--;
+
+            // Nếu hạt chạy ra ngoài màn hình hoặc hết vòng đời, hồi sinh hạt mới ngẫu nhiên
+            if (p.x < 0 || p.x > width || p.y < 0 || p.y > height || p.life <= 0) {
+                p.x = Math.random() * width;
+                p.y = Math.random() * height;
+                p.life = Math.random() * 100 + 50;
+            }
+
+            // Vẽ hạt tròn nhỏ
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Tạo vòng lặp liên tục để tạo hiệu ứng mượt mà
+        requestAnimationFrame(draw);
+    }
+
+    // Bắt đầu chạy mô phỏng
+    draw();
+</script>
+
+</body>
+</html>

@@ -3,211 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mô Phỏng Trường Vectơ Dòng Nước Xoáy</title>
+    <title>Mô phỏng Toán tử Rot (Curl)</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
             background-color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
             margin: 0;
-            padding: 20px;
         }
         .container {
             background-color: white;
-            padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            width: 500px;
             text-align: center;
-            max-width: 500px;
-            width: 100%;
         }
-        .control-panel {
+        .header {
             margin-bottom: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 6px;
         }
-        .slider-label {
-            font-size: 16px;
+        .value-display {
+            font-size: 20px;
             font-weight: bold;
             margin-bottom: 5px;
         }
-        .status-text {
+        .status-display {
             font-size: 14px;
             color: #555;
-            margin-top: 5px;
-            font-weight: 500;
+            margin-bottom: 15px;
         }
-        input[type=range] {
+        input[type="range"] {
             width: 100%;
-            margin: 10px 0;
+            margin-bottom: 20px;
         }
         canvas {
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background-color: #fff;
-            max-width: 100%;
+            border: 1px solid #ddd;
+            background-color: #fafafa;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="control-panel">
-        <div class="slider-label">Giá trị Rot (Curl): <span id="rot-value">0.0</span></div>
-        <input type="range" id="rot-slider" min="-10" max="10" step="0.5" value="0">
-        <div id="status" class="status-text">Không xoáy (Dòng chảy thẳng)</div>
+    <div class="header">
+        <div class="value-display" id="rotValText">Giá trị Rot (Curl): 7.0</div>
+        <div class="status-display" id="statusText">Xoáy Ngược chiều kim đồng hồ (Mức độ: Vừa)</div>
+        <input type="range" id="rotSlider" min="-15" max="15" step="0.5" value="7">
     </div>
-    <canvas id="simCanvas" width="450" height="450"></canvas>
+    
+    <canvas id="vectorCanvas" width="450" height="450"></canvas>
 </div>
 
 <script>
-    const canvas = document.getElementById('simCanvas');
+    const canvas = document.getElementById('vectorCanvas');
     const ctx = canvas.getContext('2d');
-    const slider = document.getElementById('rot-slider');
-    const rotValueDisplay = document.getElementById('rot-value');
-    const statusDisplay = document.getElementById('status');
+    const slider = document.getElementById('rotSlider');
+    const rotValText = document.getElementById('rotValText');
+    const statusText = document.getElementById('statusText');
 
     const width = canvas.width;
     const height = canvas.height;
     const centerX = width / 2;
     const centerY = height / 2;
+    const scale = 40; // Tỷ lệ thu phóng không gian tọa độ
 
-    // Khởi tạo danh sách các hạt (particles) để hiển thị dòng chảy
-    const numParticles = 120;
-    const particles = [];
-    for (let i = 0; i < numParticles; i++) {
-        particles.push({
-            x: Math.random() * width,
-            y: Math.random() * height,
-            life: Math.random() * 100
-        });
-    }
-
-    // Hàm xác định mức độ mạnh yếu dựa trên giá trị rot
-    function getStatusText(rot) {
-        if (rot === 0) return "Không xoáy (Dòng chảy thẳng)";
+    // Hàm vẽ mũi tên vector
+    function drawArrow(x1, y1, x2, y2) {
+        const headLength = 6; // Độ dài đầu mũi tên
+        const angle = Math.atan2(y2 - y1, x2 - x1);
         
-        let direction = rot < 0 ? "Thuận chiều kim đồng hồ" : "Ngược chiều kim đồng hồ";
-        let absRot = Math.abs(rot);
-        let strength = "";
-        
-        if (absRot <= 3) strength = "Yếu";
-        else if (absRot <= 7) strength = "Vừa";
-        else strength = "Mạnh";
-        
-        return `Xoáy ${direction} (Mức độ: ${strength})`;
-    }
-
-    // Hàm vẽ và cập nhật trạng thái mô phỏng
-    function draw() {
-        // Lấy giá trị rot từ thanh trượt
-        const rot = parseFloat(slider.value);
-        rotValueDisplay.innerText = rot.toFixed(1);
-        statusDisplay.innerText = getStatusText(rot);
-
-        // Xóa canvas cũ
-        ctx.clearRect(0, 0, width, height);
-
-        // 1. Vẽ các mũi tên Trường Vectơ (Grid ô lưới 20x20 pixel)
-        const spacing = 25;
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = 'rgba(65, 105, 225, 0.8)';
         ctx.lineWidth = 1.5;
-
-        for (let x = spacing / 2; x < width; x += spacing) {
-            for (let y = spacing / 2; y < height; y += spacing) {
-                // Tính khoảng cách từ điểm hiện tại tới tâm xoáy
-                const dx = x - centerX;
-                const dy = y - centerY;
-                const r = Math.sqrt(dx * dx + dy * dy);
-
-                if (r < 10) continue; // Bỏ qua điểm quá sát tâm để tránh lỗi toán học
-
-                // Thành phần vectơ xoáy (Vectơ vuông góc với bán kính)
-                // Nhân với tỷ lệ (r / 200) để càng ra xa xoáy càng rộng và rõ nét
-                let vx = -dy * (rot / 10) * (r / 150);
-                let vy = dx * (rot / 10) * (r / 150);
-
-                // Thêm một chút dòng chảy nền hướng lên trên để tạo độ động khi rot = 0
-                vy -= 0.5; 
-
-                // Tính độ dài mũi tên hiển thị
-                const len = Math.sqrt(vx * vx + vy * vy);
-                if (len === 0) continue;
-
-                // Chuẩn hóa và cố định độ dài mũi tên vẽ trên màn hình là 12px
-                const drawLen = 12;
-                const arrowX = (vx / len) * drawLen;
-                const arrowY = (vy / len) * drawLen;
-
-                // Tiến hành vẽ mũi tên
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x + arrowX, y + arrowY);
-                ctx.stroke();
-
-                // Vẽ đầu nhọn của mũi tên
-                ctx.save();
-                ctx.translate(x + arrowX, y + arrowY);
-                ctx.rotate(Math.atan2(arrowY, arrowX));
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(-4, -2);
-                ctx.lineTo(-4, 2);
-                ctx.fillStyle = 'rgba(52, 152, 219, 0.4)';
-                ctx.fill();
-                ctx.restore();
-            }
-        }
-
-        // 2. Cập nhật vị trí và vẽ các Hạt Phần Tử (Hạt đen) trôi theo dòng
-        ctx.fillStyle = '#2c3e50';
-        for (let i = 0; i < particles.length; i++) {
-            let p = particles[i];
-            
-            const dx = p.x - centerX;
-            const dy = p.y - centerY;
-            const r = Math.sqrt(dx * dx + dy * dy);
-
-            // Tính vận tốc tác động lên hạt tại vị trí hiện tại
-            let vx = -dy * (rot / 15);
-            let vy = dx * (rot / 15);
-            
-            // Giới hạn tốc độ hạt khi ở quá xa để tránh bị văng khỏi màn hình quá nhanh
-            if (r > 10) {
-                vx = (vx / r) * Math.min(r * (Math.abs(rot)/10), 3);
-                vy = (vy / r) * Math.min(r * (Math.abs(rot)/10), 3);
-            }
-
-            // Dòng chảy nền hướng lên trên
-            vy -= 0.8;
-
-            // Di chuyển hạt
-            p.x += vx;
-            p.y += vy;
-            p.life--;
-
-            // Nếu hạt chạy ra ngoài màn hình hoặc hết vòng đời, hồi sinh hạt mới ngẫu nhiên
-            if (p.x < 0 || p.x > width || p.y < 0 || p.y > height || p.life <= 0) {
-                p.x = Math.random() * width;
-                p.y = Math.random() * height;
-                p.life = Math.random() * 100 + 50;
-            }
-
-            // Vẽ hạt tròn nhỏ
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Tạo vòng lặp liên tục để tạo hiệu ứng mượt mà
-        requestAnimationFrame(draw);
+        ctx.stroke();
+        
+        // Vẽ đầu tam giác của mũi tên
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - headLength * Math.cos(angle - Math.PI / 6), y2 - headLength * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(x2 - headLength * Math.cos(angle + Math.PI / 6), y2 - headLength * Math.sin(angle + Math.PI / 6));
+        ctx.fillStyle = 'rgba(65, 105, 225, 0.8)';
+        ctx.fill();
     }
 
-    // Bắt đầu chạy mô phỏng
-    draw();
+    // Hàm cập nhật trạng thái hiển thị bằng chữ
+    function updateStatus(rot) {
+        rotValText.innerText = `Giá trị Rot (Curl): ${rot.toFixed(1)}`;
+        
+        let level = "Yếu";
+        if (Math.abs(rot) > 10) level = "Mạnh";
+        else if (Math.abs(rot) > 5) level = "Vừa";
+
+        if (rot > 0) {
+            statusText.innerText = `Xoáy Ngược chiều kim đồng hồ (Mức độ: ${level})`;
+            statusText.style.color = "green";
+        } else if (rot < 0) {
+            statusText.innerText = `Xoáy Cùng chiều kim đồng hồ (Mức độ: ${level})`;
+            statusText.style.color = "red";
+        } else {
+            statusText.innerText = "Trường tĩnh, không xoáy (Rot = 0)";
+            statusText.style.color = "#555";
+        }
+    }
+
+    // Hàm chính để vẽ toàn bộ lưới vector
+    function render() {
+        const rot = parseFloat(slider.value);
+        ctx.clearRect(0, 0, width, height);
+        
+        // Vẽ lưới tọa độ mờ
+        ctx.strokeStyle = '#eee';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i <= width; i += 30) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, height); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(width, i); ctx.stroke();
+        }
+
+        // Vẽ 2 trục chính Ox, Oy
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(centerX, 0); ctx.lineTo(centerX, height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, centerY); ctx.lineTo(width, centerY); ctx.stroke();
+
+        updateStatus(rot);
+
+        // Duyệt qua lưới điểm để vẽ các vector thành phần
+        const step = 25; 
+        for (let screenX = step; screenX < width; screenX += step) {
+            for (let screenY = step; screenY < height; screenY += step) {
+                
+                // Bỏ qua điểm ở sát tâm quá để hình vẽ không bị rối
+                if (Math.abs(screenX - centerX) < 15 && Math.abs(screenY - centerY) < 15) continue;
+
+                // Đổi từ tọa độ màn hình (máy tính) sang tọa độ giải tích toán học Oxy
+                const x = (screenX - centerX) / scale;
+                const y = (centerY - screenY) / scale; // Trục Y trong toán hướng lên trên
+
+                // CÔNG THỨC SỬA LỖI ĐẢO CHIỀU:
+                // Theo đúng giải tích: U = -0.5 * Rot * y và V = 0.5 * Rot * x
+                const u = -0.5 * rot * y;
+                const v = 0.5 * rot * x;
+
+                // Giới hạn độ dài hiển thị của mũi tên để đồ thị đẹp mắt, không đè lên nhau
+                const vectorScale = 2.5; 
+                
+                // Đổi ngược vector (u, v) về lại tọa độ hiển thị của màn hình máy tính
+                const targetScreenX = screenX + (u * vectorScale);
+                const targetScreenY = screenY - (v * vectorScale); // Dấu trừ do trục Y màn hình chúc xuống
+
+                drawArrow(screenX, screenY, targetScreenX, targetScreenY);
+            }
+        }
+    }
+
+    // Lắng nghe sự kiện kéo thanh trượt để vẽ lại hình ngay lập tức
+    slider.addEventListener('input', render);
+    
+    // Chạy lần đầu tiên khi mở trang web
+    render();
 </script>
 
 </body>
